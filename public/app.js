@@ -1,6 +1,9 @@
 const app = document.getElementById('app');
 const statusEl = document.querySelector('.status');
 const jumpForm = document.querySelector('[data-role="jump-form"]');
+const searchBox = document.querySelector('[data-role="search-box"]');
+const searchInput = document.querySelector('[data-role="search-input"]');
+const searchResultsEl = document.querySelector('[data-role="search-results"]');
 const dateButton = document.querySelector('[data-role="date-button"]');
 const calendarEl = document.querySelector('[data-role="calendar"]');
 const dateValueInput = document.querySelector('[data-role="date-value"]');
@@ -12,18 +15,43 @@ const nextWeekButton = document.querySelector('[data-role="jump-next-week"]');
 
 const columnsMap = new Map();
 const availableDates = new Set();
+const bookmarkElementMap = new Map();
+let allBookmarks = [];
 let columnsContainer = null;
 let calendarMonths = [];
 let currentMonthIndex = 0;
 let selectedDate = '';
 let statusMessage = '';
 let calendarOpen = false;
+let currentSearchResults = [];
+let lastHighlightedBookmark = null;
+let bookmarkHighlightTimer = null;
+const MAX_SEARCH_RESULTS = 8;
+let searchActiveIndex = -1;
 
 function highlightColumn(section) {
   section.classList.add('highlight');
   setTimeout(() => {
     section.classList.remove('highlight');
   }, 2000);
+}
+
+function highlightBookmark(element) {
+  if (!element) {
+    return;
+  }
+  if (lastHighlightedBookmark && lastHighlightedBookmark !== element) {
+    lastHighlightedBookmark.classList.remove('search-highlight');
+  }
+  element.classList.add('search-highlight');
+  if (bookmarkHighlightTimer) {
+    clearTimeout(bookmarkHighlightTimer);
+  }
+  bookmarkHighlightTimer = setTimeout(() => {
+    element.classList.remove('search-highlight');
+    bookmarkHighlightTimer = null;
+  }, 2500);
+  lastHighlightedBookmark = element;
 }
 
 function showTemporaryStatus(message) {
@@ -267,6 +295,233 @@ function getTodayTarget() {
   return findDateOnOrBefore(today);
 }
 
+function fuzzyScore(target, query) {
+  if (!target || !query) {
+    return null;
+  }
+  const haystack = target.toLowerCase();
+  const needle = query.toLowerCase();
+  let score = 0;
+  let searchIndex = 0;
+  let lastMatchIndex = -1;
+
+  for (const char of needle) {
+    const index = haystack.indexOf(char, searchIndex);
+    if (index === -1) {
+      return null;
+    }
+    if (index === searchIndex) {
+      score += 2;
+    } else {
+      score += 1;
+    }
+    if (lastMatchIndex !== -1) {
+      const gap = index - lastMatchIndex - 1;
+      score += Math.max(0, 2 - gap * 0.1);
+    }
+    searchIndex = index + 1;
+    lastMatchIndex = index;
+  }
+
+  return score - (haystack.length - needle.length) * 0.01;
+}
+
+function computeBookmarkScore(bookmark, query) {
+  const normalizedQuery = query.toLowerCase().trim();
+  if (!normalizedQuery) {
+    return null;
+  }
+  const targets = [
+    { value: (bookmark.title || '').toLowerCase(), weight: 1.2 },
+    { value: (bookmark.url || '').toLowerCase(), weight: 0.8 },
+    { value: (bookmark.pathLabel || '').toLowerCase(), weight: 0.6 },
+  ];
+
+  let bestScore = -Infinity;
+  for (const { value, weight } of targets) {
+    if (!value) continue;
+    const rawScore = fuzzyScore(value, normalizedQuery);
+    if (rawScore == null) continue;
+    const weighted = rawScore * weight;
+    if (weighted > bestScore) {
+      bestScore = weighted;
+    }
+  }
+
+  if (!Number.isFinite(bestScore) || bestScore === -Infinity) {
+    return null;
+  }
+  return bestScore;
+}
+
+function performSearch(query) {
+  const cleaned = query.trim();
+  if (!cleaned) {
+    return [];
+  }
+
+  const matches = [];
+  for (const bookmark of allBookmarks) {
+    const score = computeBookmarkScore(bookmark, cleaned);
+    if (score == null) continue;
+    matches.push({ ...bookmark, score });
+  }
+
+  matches.sort((a, b) => {
+    if (b.score === a.score) {
+      return a.title.localeCompare(b.title);
+    }
+    return b.score - a.score;
+  });
+
+  return matches.slice(0, MAX_SEARCH_RESULTS);
+}
+
+function clearSearchResults() {
+  currentSearchResults = [];
+  searchActiveIndex = -1;
+  if (searchResultsEl) {
+    searchResultsEl.innerHTML = '';
+    searchResultsEl.hidden = true;
+  }
+}
+
+function renderSearchResults(matches) {
+  if (!searchResultsEl) {
+    return;
+  }
+
+  searchResultsEl.innerHTML = '';
+  currentSearchResults = matches;
+  searchActiveIndex = -1;
+
+  if (!matches.length) {
+    const empty = document.createElement('div');
+    empty.className = 'search-result-empty';
+    empty.textContent = 'No matches found.';
+    searchResultsEl.append(empty);
+    searchResultsEl.hidden = false;
+    return;
+  }
+
+  for (const result of matches) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'search-result-item';
+    button.dataset.guid = result.guid;
+    button.dataset.date = result.date;
+
+    const title = document.createElement('span');
+    title.className = 'search-result-title';
+    title.textContent = result.title || result.url;
+
+    const meta = document.createElement('span');
+    meta.className = 'search-result-meta';
+    const metaParts = [];
+    metaParts.push(result.date);
+    if (result.pathLabel) {
+      metaParts.push(result.pathLabel);
+    }
+    if (result.hostname) {
+      metaParts.push(result.hostname);
+    }
+    meta.textContent = metaParts.join(' • ');
+
+    button.append(title, meta);
+    button.addEventListener('click', () => {
+      selectSearchResult(result);
+    });
+    button.addEventListener('keydown', event => {
+      handleSearchResultKeydown(event);
+    });
+
+    searchResultsEl.append(button);
+  }
+
+  searchResultsEl.hidden = false;
+}
+
+function handleSearchInput() {
+  if (!searchInput) {
+    return;
+  }
+  const query = searchInput.value.trim();
+  if (!query) {
+    clearSearchResults();
+    return;
+  }
+
+  const matches = performSearch(query);
+  renderSearchResults(matches);
+}
+
+function selectSearchResult(result) {
+  if (!result) {
+    return;
+  }
+  setSelectedDate(result.date);
+  jumpToDate(result.date);
+  const element = bookmarkElementMap.get(result.guid) || result.element;
+  if (element) {
+    highlightBookmark(element);
+    const list = element.closest('.bookmark-list');
+    if (list && list.scrollHeight > list.clientHeight) {
+      const offset = element.offsetTop - list.offsetTop;
+      const targetScroll = Math.max(0, offset - list.clientHeight / 3);
+      list.scrollTo({ top: targetScroll, behavior: 'smooth' });
+    }
+  }
+  if (searchResultsEl) {
+    searchResultsEl.hidden = true;
+  }
+  searchActiveIndex = -1;
+}
+
+function focusSearchResult(index) {
+  if (!searchResultsEl) {
+    return;
+  }
+  const buttons = Array.from(searchResultsEl.querySelectorAll('.search-result-item'));
+  if (!buttons.length) {
+    return;
+  }
+  if (index < 0) {
+    searchActiveIndex = -1;
+    if (searchInput) {
+      searchInput.focus();
+    }
+    return;
+  }
+  const normalized = Math.max(0, Math.min(index, buttons.length - 1));
+  searchActiveIndex = normalized;
+  const button = buttons[normalized];
+  button.focus();
+}
+
+function handleSearchResultKeydown(event) {
+  if (!currentSearchResults.length) {
+    return;
+  }
+  if (event.key === 'ArrowDown') {
+    event.preventDefault();
+    focusSearchResult(searchActiveIndex + 1);
+  } else if (event.key === 'ArrowUp') {
+    event.preventDefault();
+    focusSearchResult(searchActiveIndex - 1);
+  } else if (event.key === 'Enter') {
+    event.preventDefault();
+    const result = currentSearchResults[searchActiveIndex];
+    if (result) {
+      selectSearchResult(result);
+    }
+  } else if (event.key === 'Escape') {
+    clearSearchResults();
+    if (searchInput) {
+      searchInput.focus();
+    }
+  }
+}
+
 function updateQuickJumpButtons() {
   if (todayButton) {
     todayButton.disabled = !getTodayTarget();
@@ -505,6 +760,8 @@ function renderGroups(data) {
   columnsContainer = container;
   columnsMap.clear();
   availableDates.clear();
+  bookmarkElementMap.clear();
+  allBookmarks = [];
 
   if (!data.groups || data.groups.length === 0) {
     const empty = document.createElement('p');
@@ -553,7 +810,30 @@ function renderGroups(data) {
     list.className = 'bookmark-list';
 
     for (const item of group.items) {
-      list.append(createBookmarkItem(item));
+      const listItem = createBookmarkItem(item);
+      listItem.dataset.bookmarkGuid = item.guid;
+      list.append(listItem);
+      bookmarkElementMap.set(item.guid, listItem);
+
+      const hostname = (() => {
+        try {
+          return new URL(item.url).hostname;
+        } catch (error) {
+          return '';
+        }
+      })();
+      const pathLabel = item.path && item.path.length > 0 ? item.path.join(' / ') : '';
+
+      allBookmarks.push({
+        guid: item.guid,
+        title: item.title,
+        url: item.url,
+        date: group.date,
+        path: item.path,
+        pathLabel,
+        hostname,
+        element: listItem,
+      });
     }
 
     section.append(header, list);
@@ -571,6 +851,10 @@ function renderGroups(data) {
   }
 
   setSelectedDate(selectedDate);
+
+  if (searchInput && searchInput.value.trim()) {
+    handleSearchInput();
+  }
 }
 
 async function init() {
@@ -671,6 +955,38 @@ setSelectedDate('');
 updateQuickJumpButtons();
 init();
 
+if (searchInput) {
+  searchInput.addEventListener('input', () => {
+    handleSearchInput();
+  });
+
+  searchInput.addEventListener('focus', () => {
+    if (searchInput.value.trim()) {
+      handleSearchInput();
+    }
+  });
+
+  searchInput.addEventListener('keydown', event => {
+    if (event.key === 'ArrowDown') {
+      if (currentSearchResults.length) {
+        event.preventDefault();
+        focusSearchResult(0);
+      }
+    } else if (event.key === 'Enter') {
+      const targetResult = currentSearchResults[searchActiveIndex >= 0 ? searchActiveIndex : 0];
+      if (targetResult) {
+        event.preventDefault();
+        selectSearchResult(targetResult);
+      }
+    } else if (event.key === 'Escape') {
+      if (searchInput.value) {
+        searchInput.value = '';
+      }
+      clearSearchResults();
+    }
+  });
+}
+
 if (jumpForm) {
   jumpForm.addEventListener('submit', event => {
     event.preventDefault();
@@ -734,14 +1050,38 @@ if (nextDayButton) {
   });
 }
 
-document.addEventListener('click', () => {
+document.addEventListener('click', event => {
+  const targetNode = event.target instanceof Node ? event.target : null;
+
   if (calendarOpen) {
-    closeCalendar();
+    if (
+      calendarEl &&
+      !calendarEl.contains(targetNode) &&
+      dateButton &&
+      !dateButton.contains(targetNode)
+    ) {
+      closeCalendar();
+    }
+  }
+
+  if (searchBox) {
+    if (
+      searchResultsEl &&
+      !searchResultsEl.hidden &&
+      !(searchBox.contains(targetNode))
+    ) {
+      clearSearchResults();
+    }
   }
 });
 
 document.addEventListener('keydown', event => {
-  if (event.key === 'Escape' && calendarOpen) {
-    closeCalendar();
+  if (event.key === 'Escape') {
+    if (calendarOpen) {
+      closeCalendar();
+    }
+    if (searchResultsEl && !searchResultsEl.hidden) {
+      clearSearchResults();
+    }
   }
 });

@@ -8,7 +8,14 @@
   </head>
   <body>
     <main id="app">
-      <h1>看过 Bookmark Viewer</h1>
+      <!-- <h1>看过 Bookmark Viewer</h1> -->
+      <div class="search-box" data-role="search-box">
+        <label>
+          <span>Search</span>
+          <input type="search" placeholder="Search titles or URLs" data-role="search-input" autocomplete="off" />
+        </label>
+        <div class="search-results" data-role="search-results" hidden></div>
+      </div>
       <form class="toolbar" data-role="jump-form">
         <div class="date-picker" data-role="date-picker-wrapper">
           <span>Jump to date</span>
@@ -21,12 +28,12 @@
             <button type="button" data-role="jump-today">Today</button>
             <button type="button" data-role="jump-next-day">Next day</button>
             <button type="button" data-role="jump-next-week">Next week</button>
+            <button type="submit" class="toolbar-submit">Go</button>
           </div>
         </div>
-        <button type="submit" class="toolbar-submit">Go</button>
       </form>
-      <p class="status">Loading…</p>
     </main>
     <script type="module" src="/app.js"></script>
+    <p class="status" style="padding: 2rem;">Loading…</p>
   </body>
 </html>
