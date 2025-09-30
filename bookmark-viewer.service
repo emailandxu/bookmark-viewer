@@ -1,0 +1,16 @@
+[Unit]
+Description=Bookmark Viewer
+After=network.target
+
+[Service]
+Type=simple
+User=tony
+Group=tony
+Environment=PORT=9999
+WorkingDirectory=/home/tony/local-git-repo/bookmark-viewer
+ExecStart=/home/tony/local-git-repo/bookmark-viewer/start-bookmark-viewer.sh
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

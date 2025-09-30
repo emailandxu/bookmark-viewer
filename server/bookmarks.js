@@ -4,6 +4,7 @@ import { join } from 'node:path';
 
 const DEFAULT_BOOKMARK_PATH = join(
   homedir(),
+  // 'office',
   '.config',
   'google-chrome',
   'Default',
@@ -23,6 +24,16 @@ function chromeTimestampToDate(value) {
   const milliseconds = Math.floor(asNumber / 1000);
   const timestamp = CHROME_EPOCH_MS + milliseconds;
   return new Date(timestamp);
+}
+
+function dateToLocalDateKey(date) {
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) {
+    return null;
+  }
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }
 
 function findFolderByName(node, targetName) {
@@ -138,7 +149,7 @@ export async function loadWatchedBookmarks(options = {}) {
 
   const grouped = new Map();
   for (const item of items) {
-    const key = item.dateAdded ? item.dateAdded.slice(0, 10) : 'unknown';
+    const key = item.dateAdded ? dateToLocalDateKey(new Date(item.dateAdded)) || 'unknown' : 'unknown';
     if (!grouped.has(key)) {
       grouped.set(key, []);
     }
