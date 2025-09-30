@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>看过 Bookmark Viewer</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main id="app">
+      <h1>看过 Bookmark Viewer</h1>
+      <form class="toolbar" data-role="jump-form">
+        <div class="date-picker" data-role="date-picker-wrapper">
+          <span>Jump to date</span>
+          <input type="hidden" data-role="date-value" />
+          <button type="button" class="date-button" data-role="date-button">Select date</button>
+          <div class="calendar" data-role="calendar" hidden></div>
+          <div class="quick-jumps" data-role="quick-jumps">
+            <button type="button" data-role="jump-prev-week">Previous week</button>
+            <button type="button" data-role="jump-prev-day">Previous day</button>
+            <button type="button" data-role="jump-today">Today</button>
+            <button type="button" data-role="jump-next-day">Next day</button>
+            <button type="button" data-role="jump-next-week">Next week</button>
+          </div>
+        </div>
+        <button type="submit" class="toolbar-submit">Go</button>
+      </form>
+      <p class="status">Loading…</p>
+    </main>
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>
