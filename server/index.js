@@ -5,6 +5,7 @@ import { extname, join, normalize, resolve } from 'node:path';
 import { loadWatchedBookmarks } from './bookmarks.js';
 
 const PORT = process.env.PORT ? Number(process.env.PORT) : 5173;
+const HOST = process.env.HOST || '0.0.0.0';
 const PUBLIC_DIR = resolve(process.cwd(), 'public');
 
 const MIME_TYPES = {
@@ -93,6 +94,6 @@ const server = createServer(async (req, res) => {
   }
 });
 
-server.listen(PORT, () => {
-  console.log(`Bookmark viewer listening on http://localhost:${PORT}`);
+server.listen(PORT, HOST, () => {
+  console.log(`Bookmark viewer listening on http://${HOST}:${PORT}`);
 });

@@ -2,14 +2,18 @@ import { readFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
-const DEFAULT_BOOKMARK_PATH = join(
-  homedir(),
-  // 'office',
-  '.config',
-  'google-chrome',
-  'Default',
-  'Bookmarks',
-);
+const BOOKMARK_PATHS_BY_PLATFORM = {
+  linux: ['.config', 'google-chrome', 'Default', 'Bookmarks'],
+  darwin: ['Library', 'Application Support', 'Google', 'Chrome', 'Default', 'Bookmarks'],
+  win32: ['AppData', 'Local', 'Google', 'Chrome', 'User Data', 'Profile 3', 'Bookmarks'],
+};
+
+function resolveDefaultBookmarkPath() {
+  const segments = BOOKMARK_PATHS_BY_PLATFORM[process.platform] || BOOKMARK_PATHS_BY_PLATFORM.linux;
+  return join(homedir(), ...segments);
+}
+
+const DEFAULT_BOOKMARK_PATH = resolveDefaultBookmarkPath();
 
 const CHROME_EPOCH_MS = Date.UTC(1601, 0, 1);
 
